@@ -146,7 +146,7 @@ def query_groq(prompt):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     chat_completion = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model="llama-3.2-3b-preview"
+        model="llava-v1.5-7b-4096-preview"
     )
     return chat_completion.choices[0].message.content
 
