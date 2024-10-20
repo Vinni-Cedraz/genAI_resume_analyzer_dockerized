@@ -1,4 +1,5 @@
 FROM base_image
 COPY . .
 EXPOSE 5000
+RUN mkdir chroma_data && mkdir pdfs_posted
 CMD ["python3.12", "secure_resume_api.py"]
