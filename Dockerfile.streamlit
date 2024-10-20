@@ -1,0 +1,4 @@
+FROM base_image
+COPY . .
+RUN pip install streamlit
+CMD ["streamlit", "run", "resume_analyser.py", "--server.port", "8501"]

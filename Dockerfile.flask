@@ -1,0 +1,4 @@
+FROM base_image
+COPY . .
+EXPOSE 5000
+CMD ["python3.12", "secure_resume_api.py"]
