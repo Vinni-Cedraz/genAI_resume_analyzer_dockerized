@@ -8,10 +8,12 @@ fi
 
 # Stop and remove existing containers if they are running
 if sudo docker ps -a --format '{{.Names}}' | grep -q flask_container; then
+  echo "stopping and removing previous flask_container..."
   sudo docker stop flask_container
   sudo docker rm flask_container
 fi
 if sudo docker ps -a --format '{{.Names}}' | grep -q streamlit_container; then
+  echo "stopping and removing previous streamlit_container..."
   sudo docker stop streamlit_container
   sudo docker rm streamlit_container
 fi
