@@ -58,7 +58,7 @@ sudo docker build -t flask_api -f Dockerfile.flask .
 sudo docker build -t streamlit_app -f Dockerfile.streamlit .
 
 # Run the Flask API container
-sudo docker run -d --name flask_container --network myapp_network -p 5000:5000 -e GROQ_API_KEY=${GROQ_API_KEY} flask_api
+sudo docker run -d --name flask_container --network myapp_network -p 5000:5000 -e HUGGINGFACEHUB_API_TOKEN="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" flask_api
 
 # Wait for the API to be ready
 echo "Waiting for Flask API to be ready..."

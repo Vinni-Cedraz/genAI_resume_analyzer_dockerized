@@ -1,12 +1,16 @@
 from flask import Flask, request, jsonify
 import os
-import PyPDF2
-import chromadb
-from chromadb.utils import embedding_functions
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-import logging
+from werkzeug.utils import secure_filename
 from werkzeug.exceptions import TooManyRequests
-from groq import Groq
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import LLMChainExtractor
+from langchain_huggingface import HuggingFaceEndpoint
+import logging
+import spacy
 
 UPLOAD_FOLDER = "./pdfs_posted/"
 ALLOWED_EXTENSIONS = {"pdf"}
@@ -16,25 +20,35 @@ app = Flask(__name__)
 app.json.ensure_ascii = False
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# chromadb setup:
-persist_directory = "./chroma_data"
-chroma_client = chromadb.PersistentClient(path=persist_directory)
-func = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="paraphrase-multilingual-MiniLM-L12-v2"
+# LangChain setup
+embeddings = HuggingFaceEmbeddings(
+        model_name="neuralmind/bert-base-portuguese-cased")
+vector_store = Chroma(
+        persist_directory="./chroma_data", embedding_function=embeddings)
+
+# Setup LLM for contextual compression
+llm = HuggingFaceEndpoint(
+    repo_id="pierreguillou/bert-base-cased-squad-v1.1-portuguese",
+    model_kwargs={"temperature": 0.5},
 )
-collection = chroma_client.get_or_create_collection(
-    name="curriculos", embedding_function=func
+compressor = LLMChainExtractor.from_llm(llm)
+
+# Setup retriever with contextual compression
+retriever = ContextualCompressionRetriever(
+    base_compressor=compressor,
+    base_retriever=vector_store.as_retriever(search_kwargs={"k": 4}),
 )
+
+# Load spaCy Portuguese NER model
+nlp = spacy.load("pt_core_news_sm")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 def allowed_file(filename):
-    return (
-        "." in filename and
-        filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-    )
+    return ("." in filename and filename
+            .rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS)
 
 
 @app.route("/health")
@@ -51,7 +65,8 @@ def upload_file():
     if file.filename == "":
         return jsonify({"error": "No selected file"}), 400
     if file and allowed_file(file.filename):
-        file_path = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         file.save(file_path)
 
         # Check file size
@@ -60,31 +75,22 @@ def upload_file():
             return jsonify({"error": "File size exceeds limit"}), 400
 
         # Process the PDF
-        with open(file_path, "rb") as f:
-            pdf_reader = PyPDF2.PdfReader(f)
-            text = ""
-            for page_num in range(len(pdf_reader.pages)):
-                text += pdf_reader.pages[page_num].extract_text()
+        loader = PyPDFLoader(file_path)
+        documents = loader.load()
 
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000, chunk_overlap=500, separators=[" ", "\n", "."]
-            )
-            chunks = splitter.split_text(text)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000, chunk_overlap=200
+        )
+        splits = text_splitter.split_documents(documents)
 
-            # Store chunks in ChromaDB
-            for i, chunk in enumerate(chunks, start=1):
-                collection.add(
-                    documents=[chunk],
-                    ids=[f"{file.filename}_chunk_{i}"],
-                    metadatas=[{"source": file.filename}],
-                )
+        # Add to vector store
+        vector_store.add_documents(splits)
 
         return (
             jsonify(
                 {
-                    "message":
-                    f"PDF processed successfully, chunks created:\
-                    {len(chunks)}"
+                    "message": f"PDF processed successfully, chunks created:\
+                    {len(splits)}"
                 }
             ),
             201,
@@ -94,134 +100,48 @@ def upload_file():
 
 @app.route("/curriculum/<string:filename>", methods=["DELETE"])
 def delete_curriculum(filename):
-    collection = chroma_client.get_or_create_collection("curriculos")
-    ids = collection.get(include=[])["ids"]
-    if not any(filename in doc_id.split("_chunk_")[0] for doc_id in ids):
-        return jsonify(
-                {
-                    "message": "Curriculum Not Found Within Database"
-                }), 200
     try:
-        for doc_id in ids:
-            if filename in doc_id:
-                collection.delete(ids=[doc_id])
+        vector_store.delete(where={"source": filename})
         return jsonify({"message": "Curriculum deleted successfully"}), 200
-    except Exception:
-        return jsonify({"message": "Error deleting document"}), 500
+    except Exception as e:
+        return jsonify({"message": f"Error deleting document: {str(e)}"}), 500
 
 
 @app.route("/search", methods=["GET"])
 def search():
     query = request.args.get("query")
-    meta = collection.get(include=["metadatas"])["metadatas"]
-    meta = set(d["source"] for d in meta)
+    if not query:
+        return jsonify({"error": "No query provided"}), 400
+
+    results = retriever.get_relevant_documents(query)
+
     response_data = []
-    labeled = create_labeled_chunks()
-    doc_name_dict = {d["document"]: d["name"] for d in labeled}
-    for source in meta:
-        results = collection.query(
-            query_texts=[query], where={"source": source}, n_results=2
-        )
-        for i, result in enumerate(results["ids"][0]):
-            document = result.split("_chunk_")[0]
-            content = (
-                    results["documents"][0][i]
-                    .replace("\n", " ").replace("•", " ")
-            )
-            response_data.append(
-                {
-                    "document": document,
-                    "content": content,
-                    "distance": results["distances"][0][i],
-                    "name": doc_name_dict[document],
-                    "chunk": int(result.split("_chunk_")[1]),
-                }
-            )
-
-    response_data = sorted(response_data, key=lambda x: x["distance"])
-    return jsonify(response_data), 200
-
-
-def query_groq(prompt):
-    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    chat_completion = client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model="llava-v1.5-7b-4096-preview"
-    )
-    return chat_completion.choices[0].message.content
-
-
-def create_labeled_chunks():
-    results = collection.get(include=["documents"])
-    response_data = []
-    for i, result in enumerate(results["ids"]):
-        content = results["documents"][i].replace("\n", " ").replace("•", " ")
+    for i, doc in enumerate(results):
         response_data.append(
             {
-                "document": result.split("_chunk_")[0],
-                "chunk": int(result.split("_chunk_")[1]),
-                "content": content,
-                "name": "",
+                "document": os.path.basename(doc.metadata["source"]),
+                "content": doc.page_content,
+                "page": doc.metadata.get("page", 0),
+                "name": extract_name(doc.page_content) if i == 0 else "",
             }
         )
 
-    for chunk in response_data:
-        if chunk["chunk"] == 1:
-            name = query_groq(
-                f"""In the given chunk of text, Identify the name of the
-                candidate, filtering out any extra information and return
-                only their name and nothing else. Follow the example and
-                answer with a name and absolutely no other words, be extremely
-                concise.
-                <examples>
-                    <example1>
-                        <chunk>
-                            Diego Martins São Paulo, SP | (11) 9XXXX-XXXX |
-                            diego.martins@42sp.org.br Resumo Profissional Como
-                            Senior Cybersecurity
-                        </chunk>
-                        <your-answer>
-                            Diego Martins
-                        </your-answer>
-                    </example1>
-                    <example2>
-                        <chunk>
-                            Rafael Almeida São Paulo, SP | (11) 9XXXX-XXXX |
-                            rafael.almeida@42sp.org.br
-                        </chunk>
-                        <your-answer>
-                            Rafael Almeida
-                        </your-answer>
-                    </example2>
-                </examples>
-                <chunk>
-                {chunk["content"][:150]}
-                </chunk>
-                """
-            )
-            chunk["name"] = name
-
-    for chunk in response_data:
-        if chunk["name"] != "":
-            name = chunk["name"]
-            doc_id = chunk["document"]
-            for chunk in response_data:
-                if chunk["document"] == doc_id:
-                    chunk["name"] = name
-    return response_data
+    return jsonify(response_data), 200
 
 
-@app.route("/labeled", methods=["GET"])
-def get_labeled_chunks():
-    return jsonify(create_labeled_chunks()), 200
+def extract_name(content):
+    doc = nlp(content)
+    for ent in doc.ents:
+        if ent.label_ == "PER":
+            return ent.text
+    return ""  # Return empty string if no name is found
 
 
 @app.errorhandler(TooManyRequests)
 def handle_too_many_requests(e):
-    return (
-        jsonify({"error": "Limit of requestes exceeded. Try again later."}),
-        429,
-    )
+    return jsonify({
+        "error": "Limit of requests exceeded. Try again later."
+        }), 429
 
 
 if __name__ == "__main__":
