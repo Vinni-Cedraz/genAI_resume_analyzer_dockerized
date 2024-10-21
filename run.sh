@@ -6,18 +6,6 @@ if [ -z "$GROQ_API_KEY" ]; then
   exit 1
 fi
 
-# Stop and remove existing containers if they are running
-if sudo docker ps -a --format '{{.Names}}' | grep -q flask_container; then
-  echo "stopping and removing previous flask_container..."
-  sudo docker stop flask_container
-  sudo docker rm flask_container
-fi
-if sudo docker ps -a --format '{{.Names}}' | grep -q streamlit_container; then
-  echo "stopping and removing previous streamlit_container..."
-  sudo docker stop streamlit_container
-  sudo docker rm streamlit_container
-fi
-
 # Ask the user for the LLM size
 echo "Do you want an LLM of what size? (8b or 70b)"
 read LLM_SIZE
@@ -49,16 +37,10 @@ else
   exit 1
 fi
 
-# create a docker network
-sudo docker network create myapp_network
+echo "GROQ_API_KEY=$GROQ_API_KEY" > .env
+echo "MODEL=$MODEL" >> .env
 
-# Build the images
-sudo docker build -t base_image -f Dockerfile.base .
-sudo docker build -t flask_api -f Dockerfile.flask .
-sudo docker build -t streamlit_app -f Dockerfile.streamlit .
-
-# Run the Flask API container
-sudo docker run -d --name flask_container --network myapp_network -p 5000:5000 -e GROQ_API_KEY=${GROQ_API_KEY} flask_api
+docker-compose up --build
 
 # Wait for the API to be ready
 echo "Waiting for Flask API to be ready..."
@@ -69,7 +51,5 @@ done
 echo "Flask API is ready!"
 
 # Run the Streamlit app
-sudo docker run -d --name streamlit_container --network myapp_network -p 8501:8501 -e GROQ_API_KEY=${GROQ_API_KEY} -e MODEL=${MODEL} streamlit_app
-
 echo "All containers are up and running!"
 echo -e '\e]8;;http://localhost:8501/\e\\Click here\e]8;;\e\\'

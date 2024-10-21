@@ -1,0 +1,40 @@
+version: '3'
+
+services:
+  base_image:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    deploy:
+      mode: replicated
+      replicas: 0
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    restart: always
+    ports:
+      - "8051:8051"
+    env_file:
+      - .env
+    networks:
+      - custom_network
+    depends_on:
+      - flask_container
+
+  flask_container:
+    build:
+      context: .
+      dockerfile: Dockerfile.flask
+    restart: always
+    expose:
+      - "5000"
+    networks:
+      - custom_network
+    env_file:
+      - .env
+
+networks:
+  custom_network:
+    driver: bridge
