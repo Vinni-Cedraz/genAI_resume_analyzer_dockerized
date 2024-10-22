@@ -1,13 +1,16 @@
-version: '3'
-
 services:
-  base_image:
+
+  flask_container:
     build:
       context: .
-      dockerfile: Dockerfile.base
-    deploy:
-      mode: replicated
-      replicas: 0
+      dockerfile: Dockerfile.flask
+    restart: always
+    expose:
+      - "5000"
+    networks:
+      - custom_network
+    env_file:
+      - .env
 
   streamlit:
     build:
@@ -22,18 +25,6 @@ services:
       - custom_network
     depends_on:
       - flask_container
-
-  flask_container:
-    build:
-      context: .
-      dockerfile: Dockerfile.flask
-    restart: always
-    expose:
-      - "5000"
-    networks:
-      - custom_network
-    env_file:
-      - .env
 
 networks:
   custom_network:
