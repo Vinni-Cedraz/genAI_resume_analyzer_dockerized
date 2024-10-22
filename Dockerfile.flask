@@ -2,7 +2,4 @@ FROM base_image
 COPY . .
 EXPOSE 5000
 RUN mkdir chroma_data && mkdir pdfs_posted
-RUN python3.12 -m spacy download pt_core_news_sm
-RUN pip install -U langchain-chroma
-RUN pip install -U langchain-huggingface
-CMD ["python3.12", "secure_resume_api.py"]
+CMD ["python3.10", "secure_resume_api.py"]

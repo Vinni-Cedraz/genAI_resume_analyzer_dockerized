@@ -7,15 +7,15 @@ if [ -z "$GROQ_API_KEY" ]; then
 fi
 
 # Stop and remove existing containers if they are running
-if sudo docker ps -a --format '{{.Names}}' | grep -q flask_container; then
+if docker ps -a --format '{{.Names}}' | grep -q flask_container; then
   echo "stopping and removing previous flask_container..."
-  sudo docker stop flask_container
-  sudo docker rm flask_container
+  docker stop flask_container
+  docker rm flask_container -f
 fi
-if sudo docker ps -a --format '{{.Names}}' | grep -q streamlit_container; then
+if docker ps -a --format '{{.Names}}' | grep -q streamlit_container; then
   echo "stopping and removing previous streamlit_container..."
-  sudo docker stop streamlit_container
-  sudo docker rm streamlit_container
+  docker stop streamlit_container
+  docker rm streamlit_container -f
 fi
 
 # Ask the user for the LLM size
@@ -50,26 +50,29 @@ else
 fi
 
 # create a docker network
-sudo docker network create myapp_network
+docker network create myapp_network
 
 # Build the images
-sudo docker build -t base_image -f Dockerfile.base .
-sudo docker build -t flask_api -f Dockerfile.flask .
-sudo docker build -t streamlit_app -f Dockerfile.streamlit .
+docker build -t base_image -f Dockerfile.base .
+docker build -t flask_api -f Dockerfile.flask .
+docker build -t streamlit_app -f Dockerfile.streamlit .
 
 # Run the Flask API container
-sudo docker run -d --name flask_container --network myapp_network -p 5000:5000 -e HUGGINGFACEHUB_API_TOKEN="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" flask_api
+docker run -d --name flask_container --network myapp_network -p 5000:5000 -e HUGGINGFACEHUB_API_TOKEN="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" flask_api
 
 # Wait for the API to be ready
 echo "Waiting for Flask API to be ready..."
-while ! curl -s http://localhost:5000/health; do
-  echo "API not ready yet..."
-  sleep 5
-done
-echo "Flask API is ready!"
 
+while ! curl -s http://localhost:5000/health; do
+  for c in '|' '/' '-' '\'; do
+    echo -ne "\r$c"
+    sleep 0.5
+  done
+done
+
+echo -e "\nFlask API is ready!"
 # Run the Streamlit app
-sudo docker run -d --name streamlit_container --network myapp_network -p 8501:8501 -e GROQ_API_KEY=${GROQ_API_KEY} -e MODEL=${MODEL} streamlit_app
+docker run -d --name streamlit_container --network myapp_network -p 8501:8501 -e GROQ_API_KEY=${GROQ_API_KEY} -e MODEL=${MODEL} streamlit_app
 
 echo "All containers are up and running!"
 echo -e '\e]8;;http://localhost:8501/\e\\Click here\e]8;;\e\\'
