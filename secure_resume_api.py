@@ -21,15 +21,20 @@ app.json.ensure_ascii = False
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # LangChain setup
-embeddings = HuggingFaceEmbeddings(
-        model_name="neuralmind/bert-base-portuguese-cased")
-vector_store = Chroma(
-        persist_directory="./chroma_data", embedding_function=embeddings)
+embeddings = HuggingFaceEmbeddings(model_name="neuralmind/bert-base-portuguese-cased")
+vector_store = Chroma(persist_directory="./chroma_data", embedding_function=embeddings)
+
+# print huggingface token to debug:
+import os
+HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+if HUGGINGFACEHUB_API_TOKEN:
+    print(f"Huggingface token: {HUGGINGFACEHUB_API_TOKEN}")
+else:
+    print("No Huggingface token found")
 
 # Setup LLM for contextual compression
 llm = HuggingFaceEndpoint(
-    repo_id="pierreguillou/bert-base-cased-squad-v1.1-portuguese",
-    temperature=0.5
+    repo_id="pierreguillou/bert-base-cased-squad-v1.1-portuguese", temperature=0.5
 )
 compressor = LLMChainExtractor.from_llm(llm)
 
@@ -40,6 +45,7 @@ retriever = ContextualCompressionRetriever(
 )
 
 # Load spaCy Portuguese NER model
+spacy.cli.download("pt_core_news_sm")
 nlp = spacy.load("pt_core_news_sm")
 
 logging.basicConfig(level=logging.INFO)
@@ -47,8 +53,7 @@ logger = logging.getLogger(__name__)
 
 
 def allowed_file(filename):
-    return ("." in filename and filename
-            .rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS)
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 @app.route("/health")
@@ -113,7 +118,14 @@ def search():
     if not query:
         return jsonify({"error": "No query provided"}), 400
 
-    results = retriever.get_relevant_documents(query)
+    try:
+        results = retriever.invoke(query)
+    except requests.exceptions.HTTPError as e:
+        app.logger.error(f"HTTP error occurred: {e}")
+        return jsonify({"error": "Failed to retrieve documents"}), 500
+    except Exception as e:
+        app.logger.error(f"An error occurred: {e}")
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
     response_data = []
     for i, doc in enumerate(results):
@@ -139,9 +151,7 @@ def extract_name(content):
 
 @app.errorhandler(TooManyRequests)
 def handle_too_many_requests(e):
-    return jsonify({
-        "error": "Limit of requests exceeded. Try again later."
-        }), 429
+    return jsonify({"error": "Limit of requests exceeded. Try again later."}), 429
 
 
 if __name__ == "__main__":
