@@ -29,7 +29,7 @@ vector_store = Chroma(
 # Setup LLM for contextual compression
 llm = HuggingFaceEndpoint(
     repo_id="pierreguillou/bert-base-cased-squad-v1.1-portuguese",
-    model_kwargs={"temperature": 0.5},
+    temperature=0.5
 )
 compressor = LLMChainExtractor.from_llm(llm)
 
