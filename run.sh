@@ -40,7 +40,7 @@ fi
 echo "GROQ_API_KEY=$GROQ_API_KEY" > .env
 echo "MODEL=$MODEL" >> .env
 
-docker-compose up --build
+docker-compose up --build -d
 
 # Wait for the API to be ready
 echo "Waiting for Flask API to be ready..."
