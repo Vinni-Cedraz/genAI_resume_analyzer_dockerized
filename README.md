@@ -30,3 +30,7 @@ Caso a resposta esteja com uma formatação estranha ou resultado abaixo do espe
 
 ### 9. Tente um modelo maior
 É possível que o programa funcione melhor com alguns tipos de buscas e não tão bem com outros. Se isso acontecer, simplesmente rode o `run.sh` novamente e escolha um modelo LLM maior (70b).
+
+# Como parar o programa:
+
+Se `docker-compose down` tente `sudo docker-compose down`.

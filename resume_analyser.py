@@ -81,76 +81,6 @@ Follow the intructions within the xml tags below:
             </unrelated_query_example>
         </examples>
 """
-    # TO BE USED WITH LARGER MODELS:
-    # if "reviewer" not in st.session_state:
-    #     st.session_state.reviewer = """
-    #     <role>
-    #         You are an AI text improver, you will review the text generated
-    # by an
-    #         AI and correct it's mistakes according to it's context and the
-    # query.
-    #     </role>
-    #     <rules>
-    #         - You respond with nothing other than the improved text,
-    #         you don't talk back, it's a direct response without interaction.
-    #         - The text you'll receive will be in Brazilian Portuguese and it
-    #           should
-    #         remain in that language.
-    #         - There are two mistakes you're gonna find and correct, if you
-    # don't
-    #         find them, return the text exactly as you received it.
-    #     </rules>
-    #         <mistake1>
-    #             Saying a candidate has a skill he doesn't actually have.
-    #         <query>
-    #             Python
-    #         </query>
-    #         <context>
-    #             <Alexandre Pinto>em produção. Especialista em Python,
-    #               TensorFlow, PyTorch e Scikit-learn, com forte conhecimento
-    # em
-    #               técnicas de aprendizado supervisionado e não
-    #               supervisionado. Demons abilidades Técnicas
-    #             • Linguagens de programação: Python, SQL, R
-    #             </Alexandre Pinto>
-    #         </context>
-    #          <incorrect_ai_response>
-    #                Alexandre Pinto: Especialista em Python, com forte
-    #                 conhecimento em Django, PyTorch, TensorFlow e (...)
-    #           </incorrect_ai_response>
-    #           <corrected_text>
-    #                Alexandre Pinto: Especialista em Python, TensorFlow,
-    #                PyTorch e Scikit-learn, com conhecimento em aprendizado
-    #                supervisionado e não supervisionado. Ele também domina
-    #                SQL e R.
-    #           </corrected_text>
-    #         </mistake1>
-    #         <mistake2>
-    #             Saying a candidate doesn't have skill when he actually does.
-    #         <query>
-    #             Python
-    #         </query>
-    #         <context>
-    #             <Alexandre Pinto>em produção. Especialista em Python,
-    #               TensorFlow, PyTorch e Scikit-learn, com forte conhecimento
-    # em
-    #               técnicas de aprendizado supervisionado e não
-    #               supervisionado. Demons abilidades Técnicas
-    #             • Linguagens de programação: Python, SQL, R
-    #             </Alexandre Pinto>
-    #         </context>
-    #          <incorrect_ai_response>
-    #                Alexandre Pinto: Especialista em Python, com forte
-    #                 conhecimento em Django, PyTorch, TensorFlow e (...)
-    #           </incorrect_ai_response>
-    #           <corrected_text>
-    #                Alexandre Pinto: Especialista em Python, TensorFlow,
-    #                PyTorch e Scikit-learn, com conhecimento em aprendizado
-    #                supervisionado e não supervisionado. Ele também domina
-    #                SQL e R.
-    #           </corrected_text>
-    #         </mistake2>
-    #     """
 
 
 if st.session_state.files_to_be_uploaded:
@@ -212,20 +142,5 @@ if st.button("Pesquisar"):
             </query>"""
 
         llm_response = query_groq(st.session_state.sumarizer, user_prompt)
-
-        # TO BE USED WITH LARGER MODELS:
-        # user_prompt = f"""
-        #     <context>
-        #         {context}
-        #     </context>
-        #     <query>
-        #         {search_query}
-        #     </query>
-        #     <ai_response>
-        #         {llm_response}
-        #     </ai_response>
-        #     """
-        # improved_response = query_groq(
-        #  st.session_state.reviewer, user_prompt)
 
         st.write(llm_response)
