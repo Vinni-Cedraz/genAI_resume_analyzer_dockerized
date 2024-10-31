@@ -40,16 +40,8 @@ fi
 echo "GROQ_API_KEY=$GROQ_API_KEY" > .env
 echo "MODEL=$MODEL" >> .env
 
-docker-compose up --build -d
-
-# Wait for the API to be ready
-echo "Waiting for Flask API to be ready..."
-while ! curl -s http://localhost:5000/health; do
-  echo "API not ready yet..."
-  sleep 5
-done
-echo "Flask API is ready!"
+sudo docker-compose up --build -d
 
 # Run the Streamlit app
 echo "All containers are up and running!"
-echo -e '\e]8;;http://localhost:8501/\e\\Click here\e]8;;\e\\'
+echo -e " copy and paste this in your browser: 0.0.0.0:8051"
