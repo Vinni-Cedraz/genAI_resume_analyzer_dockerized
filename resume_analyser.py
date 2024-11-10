@@ -7,81 +7,79 @@ from collections import defaultdict
 
 st.title("Análise de currículos")
 api_url = "http://flask_container:5000"
-model = os.environ.get("MODEL")
 
-
-def query_groq(sys, user):
+def query_groq(sys_content, user_content, model):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     chat_completion = client.chat.completions.create(
         messages=[
-            {"role": "system", "content": sys},
-            {"role": "user", "content": user},
+            {"role": "system", "content": sys_content},
+            {"role": "user", "content": user_content},
         ],
         model=model,
     )
     return chat_completion.choices[0].message.content
 
-
-# Initialize session state
 # Initialize session state
 if "search" not in st.session_state:
     st.session_state.search = None
-# Initialize session_state for files_to_be_uploaded
 if "files_to_be_uploaded" not in st.session_state:
     st.session_state.files_to_be_uploaded = True
 if "sumarizer" not in st.session_state:
     st.session_state.sumarizer = """
 Follow the intructions within the xml tags below:
-        <role>
-            You are a resume analyzer machine. You'll receive a query and
-            a context. Look for the candidates that have the skill
-            specified by the query and sumarize their skills.
-        </role>
-        <rules>
-        - Always start your answers with: "Resumo das habilidades em
-        <query> de cada candidato:" and finish it with "Sinta-se livre para
-        pesquisar mais informações sobre os candidatos", unless the query is
-        not related to the main topic.
-        - The query should be related to the context of professional skills,
-        if it's not, then politely decline the request and guide them back to
-        the main topic: professional skills.
-        - Do not ask follow up questions.
-        - Your answer will ALWAYS be in Brazilian Portuguese.
-        - You'll receive context in the following format:
-        <candidate_name><chunk1>information from a separate chunk of his resume
-        </chunk1><chunk2>information from a different chunk of his resume
-        </chunk2></candidate_name>
-        - You should follow the examples.
-        </rules>
-        <examples>
-            <correct_query_example>
-            <query>
-               Java
-            </query>
-            <your_answer>
-            Resumo das habilidades em Java de cada candidato:
+    <role>
+        You are a resume analyzer machine. You'll receive a query and
+        a context. Look for the candidates that have the skill
+        specified by the query and summarize their skills.
+    </role>
+    <rules>
+    - Always start your answers with: "Resumo das habilidades em
+    <query> de cada candidato:" and finish it with "Sinta-se livre para
+    pesquisar mais informações sobre os candidatos", unless the query is
+    not related to the main topic.
+    - The query should be related to the context of professional skills,
+    if it's not, then politely decline the request and guide them back to
+    the main topic: professional skills.
+    - Do not ask follow up questions.
+    - Your answer will ALWAYS be in Brazilian Portuguese.
+    - You'll receive context in the following format:
+    <candidate_name><chunk1>information from a separate chunk of his resume
+    </chunk1><chunk2>information from a different chunk of his resume
+    </chunk2></candidate_name>
+    - You should follow the examples.
+    </rules>
+    <examples>
+        <correct_query_example>
+        <query>
+           Java
+        </query>
+        <your_answer>
+        Resumo das habilidades em Java de cada candidato:
 
-                Bruno Souza: (short summary of a the candidate skills here)
+            Bruno Souza: (short summary of a the candidate skills here)
 
-                Pedro Lima: (short summary of a the candidate skills here)
+            Pedro Lima: (short summary of a the candidate skills here)
 
-                (...)
+            (...)
 
-            Sinta-se livre para pesquisar mais informações sobre os candidatos
-            </your_answer>
-            </correct_query_example>
-            <unrelated_query_example>
-            <query>
-                Quem foi Thomas Jefferson?
-            </query>
-            <your_answer>
-                Por favor, apenas faça perguntas sobre as
-                habilidades dos candidatos.
-            </your_answer>
-            </unrelated_query_example>
-        </examples>
+        Sinta-se livre para pesquisar mais informações sobre os candidatos
+        </your_answer>
+        </correct_query_example>
+        <unrelated_query_example>
+        <query>
+            Quem foi Thomas Jefferson?
+        </query>
+        <your_answer>
+            Por favor, apenas faça perguntas sobre as
+            habilidades dos candidatos.
+        </your_answer>
+        </unrelated_query_example>
+    </examples>
 """
-
+if "queries_and_answers" not in st.session_state:
+    st.session_state.queries_and_answers = []
+if "candidate_names" not in st.session_state:
+    st.session_state.candidate_names = []
 
 if st.session_state.files_to_be_uploaded:
     files = st.file_uploader(
@@ -99,7 +97,6 @@ if st.session_state.files_to_be_uploaded:
                 st.error(f"Erro ao enviar {file.name}")
         st.session_state.files_to_be_uploaded = False
 
-
 def create_xml_context(data):
     result = ""
     for name, content_list in data.items():
@@ -113,7 +110,6 @@ def create_xml_context(data):
         result += f"<{name}>{content}</{name}>"
     return result
 
-
 # SEMANTIC SEARCH:
 search_query = st.text_input("Pesquisar por habilidades:")
 if st.button("Pesquisar"):
@@ -126,13 +122,11 @@ if st.button("Pesquisar"):
     if not st.session_state.search:
         st.error("Erro ao realizar a pesquisa, faça upload dos currículos.")
     else:
-
         grouped = defaultdict(list)
         for chnk in st.session_state.search:
             grouped[chnk["name"]].append(chnk["content"])
-
+        st.session_state.candidate_names = list(grouped.keys())
         context = create_xml_context(grouped)
-
         user_prompt = f"""
             <context>
                 {context}
@@ -140,7 +134,42 @@ if st.button("Pesquisar"):
             <query>
                 {search_query}
             </query>"""
-
-        llm_response = query_groq(st.session_state.sumarizer, user_prompt)
-
+        llm_response = query_groq(
+            st.session_state.sumarizer, user_prompt, model=os.environ.get("MODEL")
+        )
         st.write(llm_response)
+        st.session_state.queries_and_answers.append(
+            {"query": search_query, "response": llm_response}
+        )
+
+if st.button("Finalizar seleção"):
+    if st.session_state.queries_and_answers and st.session_state.candidate_names:
+        first_candidate_name = st.session_state.candidate_names[0]
+        system_prompt = "You are a helpful assistant who is generating feedback for a candidate based on previous queries and answers. You write the feedbacks in Brazilian Portuguese."
+        user_prompt = f"""
+The candidate's name is {first_candidate_name}.
+
+You are to generate a feedback for this candidate that will contain all queries from the recruiter, and for each query, provide feedback on how this candidate compared to others regarding what was asked by the query. Be careful not to mention the names of the other candidates.
+
+Proceed to give the feedback in the following format:
+
+Feedback for {first_candidate_name}:
+
+[Query 1]: [Feedback]
+
+[Query 2]: [Feedback]
+
+...
+
+Here are the queries and your previous responses:
+
+"""
+        for item in st.session_state.queries_and_answers:
+            user_prompt += f"Query: {item['query']}\nResponse:\n{item['response']}\n\n"
+        feedback = query_groq(
+            system_prompt, user_prompt, model="llama-3.2-90b-text-preview"
+        )
+        st.write(feedback)
+    else:
+        st.error("Não há dados suficientes para gerar o feedback.")
+
