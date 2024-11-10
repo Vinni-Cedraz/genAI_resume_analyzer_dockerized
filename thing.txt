@@ -1,0 +1,35 @@
+There have been automatized resume screening systems based on keywords for a
+long time.
+
+But traditional ATS systems are a black box both to the recruiters and the
+candidates. They are also expensive and unavailable to small to medium
+businesses which are often doing things the old fashioned way, which might be
+more humane, but is certainly time-consuming.
+
+ClearHire offers a gain in productivity while still leaving the human in the
+loop.
+
+By providing feedback we are using AI to help humans be more humane.
+
+We are using technology to create a cultural change here, in the
+positive direction. Given how rare it is to get any feedback at all, and
+even rarer to get a GOOD feedback.
+
+Technologies I used: LLaMa, Groq, Flask, Chromadb, Langchain, Streamlit,
+Docker, Docker-compose
+
+Techniques: RAG, prompt engineering with xml tags, CoT and a simple Agentic
+Flow.
+
+Models:
+- llama3.2 3b for name recognition
+- llama3.2 70b for sumarizing the most relevant chunks
+- llama3.2 90b for providing feedback
+
+Next Steps:
+- deploying on oracle cloud for scalability
+- using crew ai to make agentic flow cleaner, smarter and scalable
+- include a preliminar step with an agent that will rank the top 10%-15%
+  resumes that are more compatible to a job description by semantic similarity
+  and other techniques.
+
