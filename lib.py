@@ -1,7 +1,8 @@
 import os
 import PyPDF2
-import chromadb
-from chromadb.utils import embedding_functions
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import logging
 from werkzeug.exceptions import TooManyRequests
@@ -11,15 +12,12 @@ UPLOAD_FOLDER = "./pdfs_posted/"
 ALLOWED_EXTENSIONS = {"pdf"}
 MAX_FILE_SIZE = 15 * 1024 * 1024  # 15MB
 
-# chromadb setup:
-persist_directory = "./chroma_data"
-chroma_client = chromadb.PersistentClient(path=persist_directory)
-func = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="paraphrase-multilingual-MiniLM-L12-v2"
-)
-collection = chroma_client.get_or_create_collection(
-    name="curriculos", embedding_function=func
-)
+# FAISS setup
+embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+dimension = embedding_model.get_sentence_embedding_dimension()
+index = faiss.IndexFlatL2(dimension)
+documents = []
+metadata = []
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -61,13 +59,12 @@ def upload_file(file):
             )
             chunks = splitter.split_text(text)
 
-            # Store chunks in ChromaDB
+            # Store chunks in FAISS
             for i, chunk in enumerate(chunks, start=1):
-                collection.add(
-                    documents=[chunk],
-                    ids=[f"{file.filename}_chunk_{i}"],
-                    metadatas=[{"source": file.filename}],
-                )
+                embedding = embedding_model.encode(chunk)
+                index.add(np.array([embedding]))
+                documents.append(chunk)
+                metadata.append({"source": file.filename, "chunk_id": i})
 
         return {
             "message": f"PDF processed successfully, chunks created: {len(chunks)}"
@@ -76,44 +73,40 @@ def upload_file(file):
 
 
 def delete_curriculum(filename):
-    collection = chroma_client.get_or_create_collection("curriculos")
-    ids = collection.get(include=[])["ids"]
-    if not any(filename in doc_id.split("_chunk_")[0] for doc_id in ids):
+    global index, documents, metadata
+    indices_to_delete = [i for i, meta in enumerate(metadata) if meta["source"] == filename]
+    if not indices_to_delete:
         return {"message": "Curriculum Not Found Within Database"}, 200
+
     try:
-        for doc_id in ids:
-            if filename in doc_id:
-                collection.delete(ids=[doc_id])
+        index.remove_ids(np.array(indices_to_delete))
+        documents = [doc for i, doc in enumerate(documents) if i not in indices_to_delete]
+        metadata = [meta for i, meta in enumerate(metadata) if i not in indices_to_delete]
         return {"message": "Curriculum deleted successfully"}, 200
     except Exception:
         return {"message": "Error deleting document"}, 500
 
 
 def search(query):
-    meta = collection.get(include=["metadatas"])["metadatas"]
-    meta = set(d["source"] for d in meta)
+    query_embedding = embedding_model.encode(query)
+    D, I = index.search(np.array([query_embedding]), k=2)
     response_data = []
     labeled = create_labeled_chunks()
     doc_name_dict = {d["document"]: d["name"] for d in labeled}
-    for source in meta:
-        results = collection.query(
-            query_texts=[query], where={"source": source}, n_results=2
+    for i in I[0]:
+        if i == -1:
+            continue
+        document = metadata[i]["source"]
+        content = documents[i].replace("\n", " ").replace("•", " ")
+        response_data.append(
+            {
+                "document": document,
+                "content": content,
+                "distance": D[0][i],
+                "name": doc_name_dict[document],
+                "chunk": metadata[i]["chunk_id"],
+            }
         )
-        for i, result in enumerate(results["ids"][0]):
-            document = result.split("_chunk_")[0]
-            content = (
-                    results["documents"][0][i]
-                    .replace("\n", " ").replace("•", " ")
-            )
-            response_data.append(
-                {
-                    "document": document,
-                    "content": content,
-                    "distance": results["distances"][0][i],
-                    "name": doc_name_dict[document],
-                    "chunk": int(result.split("_chunk_")[1]),
-                }
-            )
 
     response_data = sorted(response_data, key=lambda x: x["distance"])
     return response_data, 200
@@ -129,14 +122,13 @@ def query_groq(prompt):
 
 
 def create_labeled_chunks():
-    results = collection.get(include=["documents"])
     response_data = []
-    for i, result in enumerate(results["ids"]):
-        content = results["documents"][i].replace("\n", " ").replace("•", " ")
+    for i, doc in enumerate(documents):
+        content = doc.replace("\n", " ").replace("•", " ")
         response_data.append(
             {
-                "document": result.split("_chunk_")[0],
-                "chunk": int(result.split("_chunk_")[1]),
+                "document": metadata[i]["source"],
+                "chunk": metadata[i]["chunk_id"],
                 "content": content,
                 "name": "",
             }
