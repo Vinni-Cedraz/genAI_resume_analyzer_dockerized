@@ -40,7 +40,7 @@ def allowed_file(filename):
 @app.route("/health")
 def health():
     app.logger.info("Health check endpoint called")
-    return "OK", 200
+    return "OK\n", 200
 
 
 @app.route("/upload_pdf", methods=["POST"])
