@@ -1,41 +1,11 @@
 #!/usr/bin/env python3.12
 import streamlit as st
-import requests
 import os
 from groq import Groq
 from collections import defaultdict
-
-def start_secure_resume_api():
-    api_process = subprocess.Popen(['python', 'secure_resume_api.py'])
-    return api_process
-
-def health_check(url):
-    try:
-        response = requests.get(url)
-        if response.status_code == 200 and response.text.strip() == "OK":
-            return True
-        else:
-            return False
-    except requests.exceptions.RequestException:
-        return False
-
-# Start the API process
-api_process = start_secure_resume_api()
-
-# Give the server some time to start
-time.sleep(60)
-
-# Perform health check
-api_url = "http://flask_container:5000"
-health_url = f"{api_url}/health"
-if health_check(health_url):
-    st.success("Health check passed: Server is running!")
-else:
-    st.error("Health check failed: Server is not running!")
-    st.stop()
+from lib import upload_file, search, get_labeled_chunks, query_groq
 
 st.title("Análise de currículos")
-api_url = "http://flask_container:5000"
 model = os.environ.get("MODEL")
 
 
@@ -51,7 +21,6 @@ def query_groq(sys, user):
     return chat_completion.choices[0].message.content
 
 
-# Initialize session state
 # Initialize session state
 if "search" not in st.session_state:
     st.session_state.search = None
@@ -118,11 +87,8 @@ if st.session_state.files_to_be_uploaded:
     )
     if files and st.session_state.files_to_be_uploaded:
         for file in files:
-            upload_response = requests.post(
-                f"{api_url}/upload_pdf",
-                files={"file": file},
-            )
-            if upload_response.status_code == 201:
+            upload_response, status_code = upload_file(file)
+            if status_code == 201:
                 st.success(f"{file.name} enviado com sucesso")
             else:
                 st.error(f"Erro ao enviar {file.name}")
@@ -146,12 +112,9 @@ def create_xml_context(data):
 # SEMANTIC SEARCH:
 search_query = st.text_input("Pesquisar por habilidades:")
 if st.button("Pesquisar"):
-    response = requests.get(
-        f"{api_url}/search?query={search_query}",
-        params={"query": search_query},
-    )
-    if response.status_code == 200:
-        st.session_state.search = response.json()
+    response, status_code = search(search_query)
+    if status_code == 200:
+        st.session_state.search = response
     if not st.session_state.search:
         st.error("Erro ao realizar a pesquisa, faça upload dos currículos.")
     else:

@@ -1,4 +1,3 @@
-from flask import Flask, request, jsonify
 import os
 import PyPDF2
 import chromadb
@@ -11,10 +10,6 @@ from groq import Groq
 UPLOAD_FOLDER = "./pdfs_posted/"
 ALLOWED_EXTENSIONS = {"pdf"}
 MAX_FILE_SIZE = 15 * 1024 * 1024  # 15MB
-
-app = Flask(__name__)
-app.json.ensure_ascii = False
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # chromadb setup:
 persist_directory = "./chroma_data"
@@ -37,27 +32,22 @@ def allowed_file(filename):
     )
 
 
-@app.route("/health")
 def health():
-    app.logger.info("Health check endpoint called")
-    return "OK\n", 200
+    logger.info("Health check function called")
+    return "OK", 200
 
 
-@app.route("/upload_pdf", methods=["POST"])
-def upload_file():
-    if "file" not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    file = request.files["file"]
+def upload_file(file):
     if file.filename == "":
-        return jsonify({"error": "No selected file"}), 400
+        return {"error": "No selected file"}, 400
     if file and allowed_file(file.filename):
-        file_path = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(file_path)
 
         # Check file size
         if os.path.getsize(file_path) > MAX_FILE_SIZE:
             os.remove(file_path)
-            return jsonify({"error": "File size exceeds limit"}), 400
+            return {"error": "File size exceeds limit"}, 400
 
         # Process the PDF
         with open(file_path, "rb") as f:
@@ -79,40 +69,27 @@ def upload_file():
                     metadatas=[{"source": file.filename}],
                 )
 
-        return (
-            jsonify(
-                {
-                    "message":
-                    f"PDF processed successfully, chunks created:\
-                    {len(chunks)}"
-                }
-            ),
-            201,
-        )
-    return jsonify({"error": "Invalid file type"}), 400
+        return {
+            "message": f"PDF processed successfully, chunks created: {len(chunks)}"
+        }, 201
+    return {"error": "Invalid file type"}, 400
 
 
-@app.route("/curriculum/<string:filename>", methods=["DELETE"])
 def delete_curriculum(filename):
     collection = chroma_client.get_or_create_collection("curriculos")
     ids = collection.get(include=[])["ids"]
     if not any(filename in doc_id.split("_chunk_")[0] for doc_id in ids):
-        return jsonify(
-                {
-                    "message": "Curriculum Not Found Within Database"
-                }), 200
+        return {"message": "Curriculum Not Found Within Database"}, 200
     try:
         for doc_id in ids:
             if filename in doc_id:
                 collection.delete(ids=[doc_id])
-        return jsonify({"message": "Curriculum deleted successfully"}), 200
+        return {"message": "Curriculum deleted successfully"}, 200
     except Exception:
-        return jsonify({"message": "Error deleting document"}), 500
+        return {"message": "Error deleting document"}, 500
 
 
-@app.route("/search", methods=["GET"])
-def search():
-    query = request.args.get("query")
+def search(query):
     meta = collection.get(include=["metadatas"])["metadatas"]
     meta = set(d["source"] for d in meta)
     response_data = []
@@ -139,7 +116,7 @@ def search():
             )
 
     response_data = sorted(response_data, key=lambda x: x["distance"])
-    return jsonify(response_data), 200
+    return response_data, 200
 
 
 def query_groq(prompt):
@@ -211,18 +188,12 @@ def create_labeled_chunks():
     return response_data
 
 
-@app.route("/labeled", methods=["GET"])
 def get_labeled_chunks():
-    return jsonify(create_labeled_chunks()), 200
+    return create_labeled_chunks(), 200
 
 
-@app.errorhandler(TooManyRequests)
 def handle_too_many_requests(e):
     return (
-        jsonify({"error": "Limit of requestes exceeded. Try again later."}),
+        {"error": "Limit of requestes exceeded. Try again later."},
         429,
     )
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
