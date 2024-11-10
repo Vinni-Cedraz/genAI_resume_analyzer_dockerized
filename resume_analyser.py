@@ -141,9 +141,9 @@ The candidate's name is {first_candidate_name}.
 
 You are to generate a feedback for this candidate that will contain all queries from the recruiter, and for each query, provide feedback on how this candidate compared to others regarding what was asked by the query. Be careful not to mention the names of the other candidates.
 
-Proceed to give the feedback in the following format:
+Proceed to give the feedback in the following format, talk directly to the candidate:
 
-Feedback for {first_candidate_name}:
+{first_candidate_name}, here is your personalized feedback:
 
 [Query 1]: [Feedback]
 
