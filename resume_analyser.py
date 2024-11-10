@@ -1,14 +1,22 @@
 #!/usr/bin/env python3.12
 import streamlit as st
+import subprocess
 import requests
 import os
 from groq import Groq
 from collections import defaultdict
 
+# Start the secure_resume_api.py
+def start_secure_resume_api():
+    api_process = subprocess.Popen(['python', 'secure_resume_api.py'])
+    return api_process
+
+# Start the API process
+api_process = start_secure_resume_api()
+
 st.title("Análise de currículos")
 api_url = "http://flask_container:5000"
 model = os.environ.get("MODEL")
-
 
 def query_groq(sys, user):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
@@ -21,8 +29,6 @@ def query_groq(sys, user):
     )
     return chat_completion.choices[0].message.content
 
-
-# Initialize session state
 # Initialize session state
 if "search" not in st.session_state:
     st.session_state.search = None
@@ -82,7 +88,6 @@ Follow the intructions within the xml tags below:
         </examples>
 """
 
-
 if st.session_state.files_to_be_uploaded:
     files = st.file_uploader(
         "Envie os currículos dos candidatos", accept_multiple_files=True
@@ -99,7 +104,6 @@ if st.session_state.files_to_be_uploaded:
                 st.error(f"Erro ao enviar {file.name}")
         st.session_state.files_to_be_uploaded = False
 
-
 def create_xml_context(data):
     result = ""
     for name, content_list in data.items():
@@ -113,7 +117,6 @@ def create_xml_context(data):
         result += f"<{name}>{content}</{name}>"
     return result
 
-
 # SEMANTIC SEARCH:
 search_query = st.text_input("Pesquisar por habilidades:")
 if st.button("Pesquisar"):
@@ -126,7 +129,6 @@ if st.button("Pesquisar"):
     if not st.session_state.search:
         st.error("Erro ao realizar a pesquisa, faça upload dos currículos.")
     else:
-
         grouped = defaultdict(list)
         for chnk in st.session_state.search:
             grouped[chnk["name"]].append(chnk["content"])
