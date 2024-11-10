@@ -146,7 +146,7 @@ def query_groq(prompt):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     chat_completion = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model="llama-3.2-11b-text-preview"
+        model="llama-3.2-3b-preview"
     )
     return chat_completion.choices[0].message.content
 
@@ -195,7 +195,7 @@ def create_labeled_chunks():
                     </example2>
                 </examples>
                 <chunk>
-                {chunk["content"][:150]}
+                {chunk["content"][:120]}
                 </chunk>
                 """
             )

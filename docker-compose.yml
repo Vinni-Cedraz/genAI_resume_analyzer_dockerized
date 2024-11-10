@@ -5,8 +5,8 @@ services:
       context: .
       dockerfile: Dockerfile.flask
     restart: always
-    expose:
-      - "5000"
+    ports:
+      - "5000:5000"
     networks:
       - custom_network
     env_file:
